@@ -8,6 +8,12 @@ import (
 	"os"
 )
 
+type config struct {
+	Server string `toml:"server"`
+	Port   int    `toml:"port"`
+	Image  int    `toml:"image"`
+}
+
 var commands = []*cli.Command{
 	{
 		Name:    "build",
