@@ -37,6 +37,22 @@ func readYamlConfig() {
 	fmt.Print(file)
 }
 
+func writeConfigFile() {
+
+}
+
+func build() {
+
+}
+
+func upload() {
+
+}
+
+func reload() {
+
+}
+
 func cmdBuild(c *cli.Context) error {
 
 	return nil
