@@ -1,27 +1,21 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"github.com/urfave/cli"
 	"io"
 	"os"
 	"os/exec"
-	"path"
-	"runtime"
-	"sync"
+	"strings"
+	"time"
 )
 
 type Config struct {
-	Address  string
-	Username string
-	Password string
+	Address string
 }
 
 var config = Config{
-	Address:  "server",
-	Username: "username",
-	Password: "password",
+	Address: "server address",
 }
 
 var commands = []*cli.Command{
@@ -49,82 +43,106 @@ var commands = []*cli.Command{
 		Aliases: []string{"u"},
 		Usage:   "上传镜像",
 		Action:  cmdUpload,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "path",
+				Aliases:  []string{"p"},
+				Usage:    "上传的路径，相对路径，相对于私有仓库的根目录下的/docker-pbg-local",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "image",
+				Aliases:  []string{"i"},
+				Usage:    "需要上传的镜像",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "name",
+				Aliases:  []string{"n"},
+				Usage:    "镜像名称",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "version",
+				Aliases:  []string{"v"},
+				Usage:    "需要上传的镜像版本号",
+				Required: true,
+			},
+		},
 	},
 }
 
-func build() {
-
-}
-
-func upload() {
-
-}
-
-func reload() {
-
-}
-func processError(err error) {
+func login() error {
+	fmt.Printf("准备登录私有仓库 %s\n", config.Address)
+	cmdString := fmt.Sprintf("docker login %s", config.Address)
+	err := stdoutPrint(cmdString)
 	if err != nil {
-		fmt.Printf("somthing was wrong: %s", err)
+		fmt.Printf("登录失败！\n")
+		os.Exit(1)
 	}
+
+	fmt.Printf("登录成功!\n")
+	return nil
 }
-func getCurrentPathByRunner() string {
-	var abPath string
-	_, filename, _, ok := runtime.Caller(0)
-	if ok {
-		abPath = path.Dir(filename)
-		fmt.Printf("当前工作路径：%s\n", abPath)
-	}
-	return abPath
-}
-func stdoutPrint(ctx *cli.Context, cmdString string) error {
-	cmd := exec.Command("cmd", "/C", cmdString)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		reader := bufio.NewReader(stdout)
-		for {
-			select {
-			case <-ctx.Done():
-				if ctx.Err() != nil {
-					fmt.Printf("程序出现错误：%q", ctx.Err())
+
+func printLog(reader io.ReadCloser) error {
+	bucket := make([]byte, 1024)
+	buffer := make([]byte, 100)
+	for {
+		num, err := reader.Read(buffer)
+		if err != nil {
+			if err == io.EOF || strings.Contains(err.Error(), "closed") {
+				err = nil
+			}
+			return err
+		}
+
+		if num > 0 {
+			line := ""
+			bucket = append(bucket, buffer[:num]...)
+			tmp := string(bucket)
+			if strings.Contains(tmp, "\n") {
+				ts := strings.Split(tmp, "\n")
+				if len(ts) > 1 {
+					line = strings.TrimSpace(strings.Join(ts[:len(ts)-1], "\n"))
+					bucket = []byte(ts[len(ts)-1])
 				} else {
-					fmt.Printf("程序被终止！")
+					line = ts[0]
+					bucket = bucket[:0]
 				}
-			default:
-				readString, err := reader.ReadString('\n')
-				if err != nil || err == io.EOF {
-					return
-				}
-				fmt.Printf(readString)
+				fmt.Printf("%s\n", line)
 			}
 		}
-	}(&wg)
-	err = cmd.Start()
-	if err != nil {
+	}
+}
+
+func stdoutPrint(cmdString string) error {
+	//fmt.Printf("cmdString: %s\n", cmdString)
+	fmt.Print("---------- 分割线 ----------\n")
+	cmd := exec.Command("cmd", "/C", cmdString)
+	closed := make(chan struct{})
+	defer close(closed)
+
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
+		fmt.Printf("Error Starting command: %s.....\n", err.Error())
 		return err
 	}
-	wg.Wait()
+
+	go printLog(stdout)
+	go printLog(stderr)
+
+	if err := cmd.Wait(); err != nil {
+		fmt.Printf("Error Waiting command: %s.....\n", err.Error())
+		return err
+	}
 	return nil
 }
 func cmdBuild(ctx *cli.Context) error {
-	abPath := getCurrentPathByRunner()
-
-	//fmt.Printf("准备登录私有仓库 %s\n", config.Address)
-	cmdString := fmt.Sprintf("docker login %s -p %s -u %s", config.Address, config.Password, config.Username)
-	cmd := exec.Command("cmd", cmdString)
-	_, err := cmd.Output()
-	if err != nil {
-		fmt.Println("登录失败\n")
-		return err
-	}
-
-	fmt.Println("登录成功!\n")
+	var cmdString string
+	abPath, _ := os.Getwd()
 	file, err := os.Open("./docker-compose.yaml")
 	if err != nil {
 		fmt.Printf("当前目录没有 docker-compose.yaml 文件！\n")
@@ -138,12 +156,12 @@ func cmdBuild(ctx *cli.Context) error {
 	var needDist = ctx.Bool("dist")
 	if needDist {
 		fmt.Printf("开始打包前端项目\n")
-		cmdString = fmt.Sprintf("cd ../%s && yarn build", service)
-		err = stdoutPrint(ctx, cmdString)
-		//_, err = cmd.Output()
+		cmdString = fmt.Sprintf("cd %s && yarn build", service)
+
+		err = stdoutPrint(cmdString)
 		if err != nil {
-			fmt.Printf("前端打包失败！\n")
-			return err
+			fmt.Printf("前端打包失败！\n%s\n", err)
+			os.Exit(1)
 		}
 
 		fmt.Printf("前端打包成功！\n")
@@ -153,9 +171,11 @@ func cmdBuild(ctx *cli.Context) error {
 
 	fmt.Printf("开始打包 docker 镜像\n")
 	cmdString = fmt.Sprintf("docker-compose build %s", service)
-	err = stdoutPrint(ctx, cmdString)
+
+	err = stdoutPrint(cmdString)
 	if err != nil {
-		return err
+		fmt.Printf("镜像打包失败！\n%s\n", err)
+		os.Exit(1)
 	}
 
 	fmt.Printf("镜像打包成功\n")
@@ -163,7 +183,39 @@ func cmdBuild(ctx *cli.Context) error {
 	return nil
 }
 
-func cmdUpload(c *cli.Context) error {
+func cmdUpload(ctx *cli.Context) error {
+	err := login()
+	if err != nil {
+		return err
+	}
+
+	server := ctx.String("server")
+	if server == "" {
+		server = config.Address
+	}
+	imagePath := ctx.String("path")
+	image := ctx.String("image")
+	version := ctx.String("version")
+	name := ctx.String("name")
+	dateNow := time.Now().Format("20060102150405")
+	tag := fmt.Sprintf("%s/docker-pbg-local%s/%s:%s-%s", server, imagePath, name, version, dateNow)
+
+	cmdString := fmt.Sprintf("docker tag %s:latest %s", image, tag)
+	err = stdoutPrint(cmdString)
+	if err != nil {
+		fmt.Printf("tag失败！\n%s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("tag成功！\n")
+
+	cmdString = fmt.Sprintf("docker push %s", tag)
+	err = stdoutPrint(cmdString)
+	if err != nil {
+		fmt.Printf("镜像上传失败！\n%s\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("docker上传镜像完成！%s镜像地址为%s\n", image, tag)
 
 	return nil
 }
@@ -194,7 +246,7 @@ func run() int {
 
 func msg(err error) int {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
+		_, _ = fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[0], err)
 		return 1
 	}
 	return 0
