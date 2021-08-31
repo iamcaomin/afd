@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/urfave/cli"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/urfave/cli"
 )
 
 type Config struct {
