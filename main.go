@@ -223,20 +223,12 @@ func cmdUpload(ctx *cli.Context) error {
 func run() int {
 	app := cli.NewApp()
 	app.Name = "afd"
-	app.Usage = "暂时支持 docker-compose 打包"
+	app.Usage = "暂时支持 docker-compose 打包，建议首次登录docker私有仓库的用户，先命令行手动登录成功一次！"
 
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:  "server",
 			Usage: "私有仓库服务器地址",
-		},
-		&cli.StringFlag{
-			Name:  "username",
-			Usage: "服务器用户名",
-		},
-		&cli.StringFlag{
-			Name:  "password",
-			Usage: "服务器密码",
 		},
 	}
 	app.Commands = commands
