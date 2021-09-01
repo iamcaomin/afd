@@ -12,11 +12,17 @@ import (
 )
 
 type Config struct {
-	Address string
+	Address   string
+	BasicPath string
+	ImagePath string
+	Version   string
 }
 
 var config = Config{
-	Address: "server address",
+	Address:   "server name",
+	BasicPath: "/docker-pbg-local",
+	ImagePath: "/cems-frontend",
+	Version:   "1.0.0",
 }
 
 var commands = []*cli.Command{
@@ -46,12 +52,6 @@ var commands = []*cli.Command{
 		Action:  cmdUpload,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "path",
-				Aliases:  []string{"p"},
-				Usage:    "上传的路径，相对路径，相对于私有仓库的根目录下的/docker-pbg-local",
-				Required: true,
-			},
-			&cli.StringFlag{
 				Name:     "image",
 				Aliases:  []string{"i"},
 				Usage:    "需要上传的镜像",
@@ -64,10 +64,16 @@ var commands = []*cli.Command{
 				Required: true,
 			},
 			&cli.StringFlag{
-				Name:     "version",
-				Aliases:  []string{"v"},
-				Usage:    "需要上传的镜像版本号",
-				Required: true,
+				Name:        "path",
+				Aliases:     []string{"p"},
+				Usage:       "上传的相对路径，相对于私有仓库的根目录下的/docker-pbg-local",
+				DefaultText: "/cems-frontend",
+			},
+			&cli.StringFlag{
+				Name:        "version",
+				Aliases:     []string{"v"},
+				Usage:       "需要上传的镜像版本号",
+				DefaultText: "1.0.0",
 			},
 		},
 	},
@@ -195,11 +201,17 @@ func cmdUpload(ctx *cli.Context) error {
 		server = config.Address
 	}
 	imagePath := ctx.String("path")
+	if imagePath == "" {
+		imagePath = config.ImagePath
+	}
 	image := ctx.String("image")
 	version := ctx.String("version")
+	if version == "" {
+		version = config.Version
+	}
 	name := ctx.String("name")
 	dateNow := time.Now().Format("20060102150405")
-	tag := fmt.Sprintf("%s/docker-pbg-local%s/%s:%s-%s", server, imagePath, name, version, dateNow)
+	tag := fmt.Sprintf("%s%s%s/%s:%s-%s", server, config.BasicPath, imagePath, name, version, dateNow)
 
 	cmdString := fmt.Sprintf("docker tag %s:latest %s", image, tag)
 	err = stdoutPrint(cmdString)
