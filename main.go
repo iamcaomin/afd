@@ -109,6 +109,7 @@ func printLog(reader io.ReadCloser) error {
 			bucket = append(bucket, buffer[:num]...)
 			tmp := string(bucket)
 			if strings.Contains(tmp, "\n") {
+				tmp = strings.TrimSpace(tmp)
 				ts := strings.Split(tmp, "\n")
 				if len(ts) > 1 {
 					line = strings.TrimSpace(strings.Join(ts[:len(ts)-1], "\n"))
@@ -177,7 +178,7 @@ func cmdBuild(ctx *cli.Context) error {
 	}
 
 	fmt.Printf("开始打包 docker 镜像\n")
-	cmdString = fmt.Sprintf("docker-compose build %s", service)
+	cmdString = fmt.Sprintf("docker-compose build --no-cache %s", service)
 
 	err = stdoutPrint(cmdString)
 	if err != nil {
@@ -191,10 +192,10 @@ func cmdBuild(ctx *cli.Context) error {
 }
 
 func cmdUpload(ctx *cli.Context) error {
-	err := login()
-	if err != nil {
-		return err
-	}
+	//err := login()
+	//if err != nil {
+	//	return err
+	//}
 
 	server := ctx.String("server")
 	if server == "" {
@@ -214,7 +215,7 @@ func cmdUpload(ctx *cli.Context) error {
 	tag := fmt.Sprintf("%s%s%s/%s:%s-%s", server, config.BasicPath, imagePath, name, version, dateNow)
 
 	cmdString := fmt.Sprintf("docker tag %s:latest %s", image, tag)
-	err = stdoutPrint(cmdString)
+	err := stdoutPrint(cmdString)
 	if err != nil {
 		fmt.Printf("tag失败！\n%s\n", err)
 		os.Exit(1)
@@ -229,6 +230,14 @@ func cmdUpload(ctx *cli.Context) error {
 	}
 
 	fmt.Printf("docker上传镜像完成！%s镜像地址为%s\n", image, tag)
+
+	//cmdString = fmt.Sprintf("docker logout %s", server)
+	//err = stdoutPrint(cmdString)
+	//if err != nil {
+	//	fmt.Printf("退出失败！\n%s\n", err)
+	//	os.Exit(1)
+	//}
+	//fmt.Printf("docker 退出登录！\n", image, tag)
 
 	return nil
 }
